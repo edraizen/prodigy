@@ -29,11 +29,11 @@ except ImportError as e:
     print('[!] The binding affinity prediction tools require Biopython', file=sys.stderr)
     raise ImportError(e)
 
-from lib.freesasa import execute_freesasa
-from lib.models import IC_NIS
-from lib.utils import _check_path, dg_to_kd
-from lib.parsers import parse_structure
-from lib import aa_properties
+from prodigy.lib.sasa import execute_freesasa
+from prodigy.lib.models import IC_NIS
+from prodigy.lib.utils import _check_path, dg_to_kd
+from prodigy.lib.parsers import parse_structure
+from prodigy.lib import aa_properties
 
 
 def calculate_ic(struct, d_cutoff=5.5, selection=None):
@@ -178,7 +178,7 @@ class Prodigy:
             handle.write('[+] Percentage of charged NIS residues: {0:3.2f}\n'.format(self.nis_c))
             handle.write('[++] Predicted binding affinity (kcal.mol-1): {0:8.1f}\n'.format(self.ba_val))
             handle.write(
-                '[++] Predicted dissociation constant (M) at {:.1f}˚C: {:8.1e}\n'.format(self.temp, self.kd_val))
+                '[++] Predicted dissociation constant (M) at {:.1f} degree C: {:8.1e}\n'.format(self.temp, self.kd_val))
 
         if handle is not sys.stdout:
             handle.close()

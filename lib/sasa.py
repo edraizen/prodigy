@@ -15,6 +15,13 @@ import os
 import subprocess
 import sys
 import tempfile
+from itertools import groupby
+
+try:
+    import freesasa
+except ImportError as e:
+    print('[!] The binding affinity prediction tools require freesasa-python', file=sys.stderr)
+    raise ImportError(e)
 
 try:
     from Bio.PDB import PDBParser
@@ -23,8 +30,8 @@ except ImportError as e:
     print('[!] The binding affinity prediction tools require Biopython', file=sys.stderr)
     raise ImportError(e)
 
-from config import FREESASA_BIN, FREESASA_PAR
-from aa_properties import rel_asa
+from prodigy.config import FREESASA_BIN, FREESASA_PAR
+from prodigy.lib.aa_properties import rel_asa
 
 def execute_freesasa(structure, selection=None):
     """
@@ -39,20 +46,16 @@ def execute_freesasa(structure, selection=None):
     """
     io = PDBIO()
 
-    freesasa, param_f= FREESASA_BIN, FREESASA_PAR
+    param_f = FREESASA_PAR
     # try to get freesasa paths from environment if not use the ones defined in config file
-    if 'FREESASA_BIN' in os.environ:
-        if os.path.isfile(os.environ['FREESASA_BIN']):
-            freesasa = os.environ['FREESASA_BIN']
 
     if 'FREESASA_PAR' in os.environ:
         if os.path.isfile(os.environ['FREESASA_PAR']):
             param_f = os.environ['FREESASA_PAR']
 
-    if not os.path.isfile(freesasa):
-        raise IOError('[!] freesasa binary not found at `{0}`'.format(freesasa))
-    if not os.path.isfile(param_f):
-        raise IOError('[!] Atomic radii file not found at `{0}`'.format(param_f))
+    if param_f is None or not os.path.isfile(param_f):
+        param_f = os.path.join(os.path.dirname(os.path.dirname( \
+            os.path.abspath(__file__))), "data", "naccess.config")
 
     # Rewrite PDB using Biopython to have a proper format
     # freesasa is very picky with line width (80 characters or fails!)
@@ -66,33 +69,33 @@ def execute_freesasa(structure, selection=None):
             else:
                 return 0
 
+    #Save chains in selection to new PDB file
+    #Will remove when freesasa-python has the ability select chain groups
     _pdbf = tempfile.NamedTemporaryFile()
     io.set_structure(structure)
     io.save(_pdbf.name, ChainSelector())
 
-    # Run freesasa
-    # Save atomic asa output to another temp file
-    _outf = tempfile.NamedTemporaryFile()
-    cmd = '{0} -o {1} --format=pdb -c {2} {3}'.format(freesasa, _outf.name, param_f, _pdbf.name)
-    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = p.communicate()
-
-    if p.returncode:
+    try:
+        # Run freesasa
+        classifier = freesasa.Classifier(param_f)
+        structure = freesasa.Structure(_pdbf.name, classifier)
+        result = freesasa.calc(structure)
+    except (KeyboardInterrupt, SystemExit):
+        #freesasa will throw a regular exception
+        raise
+    except (AssertionError, IOError, Exception) as e:
         print('[!] freesasa did not run successfully', file=sys.stderr)
-        print(cmd, file=sys.stderr)
-        raise Exception(stderr)
+        print(e, file=sys.stderr)
+        raise Exception(e)
 
-    # Rewind & Parse results file
-    # Save
-    _outf.seek(0)
-    asa, rsa = parse_freesasa_output(_outf)
+    # Parse freesasa results
+    asa, rsa = parse_freesasa_output(result, structure)
 
     _pdbf.close()
-    _outf.close()
 
     return asa, rsa
 
-def parse_freesasa_output(fpath):
+def parse_freesasa_output(result, structure):
     """
     Returns per-residue relative accessibility of side-chain and main-chain
     atoms as calculated by freesasa.
@@ -103,22 +106,22 @@ def parse_freesasa_output(fpath):
     _rsa = rel_asa
     _bb = set(('CA', 'C', 'N', 'O'))
 
-    P = PDBParser(QUIET=1)
-    s = P.get_structure('bogus', fpath.name)
-    for res in s.get_residues():
-        res_id = (res.parent.id, res.resname, res.id[1])
+    for res, atoms in groupby(range(result.nAtoms()), key=structure.residueNumber):
+        res_id = None
         asa_mc, asa_sc, total_asa = 0, 0, 0
-        for atom in res:
-            aname = atom.name
-            at_id = (res.parent.id, res.resname, res.id[1], aname)
-            asa = atom.bfactor
-            # if atom.name in _bb:
+        for i in atoms:
+            at_id = (structure.chainLabel(i), structure.residueName(i),
+                structure.residueNumber(i), structure.atomName(i))
+            if res_id is None:
+                res_id = at_id[:-1]
+            asa = result.atomArea(i)
+            # if structure.atomName(i) in _bb:
             #     asa_mc += asa
             # else:
             #     asa_sc += asa
             total_asa += asa
             asa_data[at_id] = asa
 
-        rsa_data[res_id] = total_asa / _rsa['total'][res.resname]
+        rsa_data[res_id] = total_asa / _rsa['total'][structure.residueName(i)]
 
     return asa_data, rsa_data
