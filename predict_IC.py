@@ -14,7 +14,7 @@ Contacts-based prediction of binding affinity in protein-protein complexes.
 eLife (2015)
 """
 
-from __future__ import print_function, division
+
 
 __version__ = '2.0'
 
@@ -90,14 +90,14 @@ def analyse_nis(sasa_dict, acc_threshold=0.05):
     _char_to_index = lambda x: {'A': 0, 'C': 1, 'P': 2}.get(x)
     count = [0, 0, 0]
 
-    for res, rsa in sasa_dict.iteritems():
+    for res, rsa in list(sasa_dict.items()):
         chain, resn, resi = res
         if rsa >= acc_threshold:
             aa_character = _data[resn]
             aa_index = _char_to_index(aa_character)
             count[aa_index] += 1
 
-    percentages = map(lambda x: 100 * x / sum(count), count)
+    percentages = [100 * x / sum(count) for x in count]
     # print('[+] No. of buried interface residues: {0}'.format(sum(count)))
     return percentages
 

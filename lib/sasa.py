@@ -9,7 +9,7 @@
 Functions to execute freesasa and parse its output.
 """
 
-from __future__ import print_function, division
+
 
 import os
 import subprocess
@@ -106,7 +106,7 @@ def parse_freesasa_output(result, structure):
     _rsa = rel_asa
     _bb = set(('CA', 'C', 'N', 'O'))
 
-    for res, atoms in groupby(range(result.nAtoms()), key=structure.residueNumber):
+    for res, atoms in groupby(list(range(result.nAtoms())), key=structure.residueNumber):
         res_id = None
         asa_mc, asa_sc, total_asa = 0, 0, 0
         for i in atoms:

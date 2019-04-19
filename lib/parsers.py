@@ -9,7 +9,7 @@
 Functions to read PDB/mmCIF files
 """
 
-from __future__ import print_function, division
+
 
 import os
 import sys
