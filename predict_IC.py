@@ -104,7 +104,7 @@ def analyse_nis(sasa_dict, acc_threshold=0.05):
 
 class Prodigy:
     # init parameters
-    def __init__(self, struct_obj, selection=None, temp=25.0):
+    def __init__(self, struct_obj, selection=None, temp=25.0, strict=True):
         self.temp = float(temp)
         if selection is None:
             self.selection = [chain.id for chain in structure.get_chains()]
@@ -117,6 +117,7 @@ class Prodigy:
         self.nis_c = 0
         self.ba_val = 0
         self.kd_val = 0
+        self.strict = strict
 
     def predict(self, temp=None, distance_cutoff=5.5, acc_threshold=0.05):
         if temp is not None:
@@ -132,7 +133,13 @@ class Prodigy:
                 selection_dict[chain] = igroup
 
         # Contacts
-        self.ic_network = calculate_ic(self.structure, d_cutoff=distance_cutoff, selection=selection_dict)
+        try:
+            self.ic_network = calculate_ic(self.structure, d_cutoff=distance_cutoff, selection=selection_dict)
+        except ValueError as e:
+            if self.strict:
+                raise
+            print('[!] PRODIGY could not find any contacts: {}'.format(e), file=sys.stderr)
+            self.ic_network = []
 
         self.bins = analyse_contacts(self.ic_network)
 
